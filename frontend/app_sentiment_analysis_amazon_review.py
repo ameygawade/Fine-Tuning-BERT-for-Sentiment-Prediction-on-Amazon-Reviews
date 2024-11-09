@@ -10,7 +10,6 @@ model = BertForSequenceClassification.from_pretrained('./bert_sentiment_v2')
 model.eval()
 tokenizer = BertTokenizer.from_pretrained('./bert_sentiment_tokenizer_v2')
 
-
 # Set up SQLite database connection
 conn = sqlite3.connect("sentiment_analysis.db", check_same_thread=False)
 cursor = conn.cursor()
@@ -23,9 +22,8 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS predictions
                    Prediction_is_correct BOOLEAN)''')
 conn.commit()
 
-
 # Streamlit interface
-st.title("Sentiment Analysis")
+st.title("Sentiment Analysis APP for Amazon echo reviews")
 st.write("Enter a product review to get the predicted sentiment:")
 
 def convert_emoji_to_text(text):
@@ -58,6 +56,10 @@ def save_to_database(df):
                        (row['Review'], row['Sentiment_prediction'], row['Prediction_is_correct?']))
     conn.commit()
 
+# Initialize session state for DataFrame if it doesn't exist
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame()
+
 # Input section with form
 with st.form("Review"):
     user_input = st.text_area("Enter your review here", max_chars=5000)
@@ -75,7 +77,8 @@ with st.form("Review"):
             # Ensure there's a "Review" column in the file
             if "Review" in data.columns:
                 df = display_prediction(data)  # Predict sentiment for each review
-                show_df = st.data_editor(df)  # Display editable DataFrame
+                st.session_state.df = df  # Store in session state for persistence
+                
             else:
                 st.error("The uploaded CSV file must contain a 'Review' column.")
         
@@ -83,12 +86,17 @@ with st.form("Review"):
         elif user_input:
             # Single review prediction
             df = pd.DataFrame([{"Review": user_input, "Sentiment_prediction": predict_sentiment(user_input), "Prediction_is_correct?": True}])
-            show_df = st.data_editor(df)
+            st.session_state.df = df  # Store in session state for persistence
+
+# Display the DataFrame using st.data_editor with session state
+if not st.session_state.df.empty:
+    edited_df = st.data_editor(st.session_state.df, num_rows="dynamic")  
+    st.session_state.df = edited_df  # Update session state with any edits
 
 with st.form("your prediction"):
     # Final submission for feedback
     submit_prediction = st.form_submit_button("Submit Prediction Result")
     if submit_prediction:
-        save_to_database(df)
+        save_to_database(st.session_state.df)
         st.balloons()
-        st.write("Thank you for your input!")        
+        st.write("Thank you for your input!")
